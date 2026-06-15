@@ -154,7 +154,7 @@ public class TransactionService {
                 BigDecimal spent = transactionRepository.sumExpenseByUserIdAndCategoryAndDateRange(
                         userId, categoryId, startDate, endDate);
 
-                if (spent.compareTo(budget.getAmountLimit()) > 0) {
+                if (spent.compareTo(budget.getAmountLimit()) >= 0) {
                     Category cat = categoryRepository.findById(categoryId).orElse(null);
                     String categoryName = cat != null ? cat.getName() : "Unknown";
 

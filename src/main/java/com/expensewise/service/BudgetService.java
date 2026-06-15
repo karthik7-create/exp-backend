@@ -9,6 +9,7 @@ import com.expensewise.exception.ResourceNotFoundException;
 import com.expensewise.repository.BudgetRepository;
 import com.expensewise.repository.CategoryRepository;
 import com.expensewise.repository.TransactionRepository;
+import com.expensewise.repository.UserRepository;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -23,13 +24,19 @@ public class BudgetService {
     private final BudgetRepository budgetRepository;
     private final CategoryRepository categoryRepository;
     private final TransactionRepository transactionRepository;
+    private final UserRepository userRepository;
+    private final EmailService emailService;
 
     public BudgetService(BudgetRepository budgetRepository,
                          CategoryRepository categoryRepository,
-                         TransactionRepository transactionRepository) {
+                         TransactionRepository transactionRepository,
+                         UserRepository userRepository,
+                         EmailService emailService) {
         this.budgetRepository = budgetRepository;
         this.categoryRepository = categoryRepository;
         this.transactionRepository = transactionRepository;
+        this.userRepository = userRepository;
+        this.emailService = emailService;
     }
 
     public List<BudgetDTO> getBudgets(Long userId, int month, int year) {
@@ -65,6 +72,20 @@ public class BudgetService {
         }
 
         Budget saved = budgetRepository.save(budget);
+
+        // Check if the newly set budget limit is already exceeded
+        LocalDate startDate = LocalDate.of(saved.getYear(), saved.getMonth(), 1);
+        LocalDate endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
+        BigDecimal spent = transactionRepository.sumExpenseByUserIdAndCategoryAndDateRange(
+                userId, saved.getCategoryId(), startDate, endDate);
+
+        if (spent != null && spent.compareTo(saved.getAmountLimit()) >= 0) {
+            userRepository.findById(userId).ifPresent(user ->
+                emailService.sendBudgetExceededEmail(
+                    user.getFullName(), user.getEmail(),
+                    category.getName(), saved.getAmountLimit(), spent)
+            );
+        }
 
         // Reload to get category relationship
         Budget reloaded = budgetRepository.findById(saved.getId())
